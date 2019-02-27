@@ -140,9 +140,49 @@ int main(int argc, char *argv[])
 			memset(&buffer, 0, sizeof(buffer));			
 			printf("WAITING FOR OK...\n");
 			r_len = recv(s_socket, buffer, 2, 0);
+			
 			printf("SERVER SENT - %s\n", buffer);
 			
-			if (strcmp(buffer, "OD") == 0)
+			if (buffer[0] == 'W')
+			{
+				//winner
+				int tempWhile = 1;
+				char tempChar;
+				printf("CONGRATULATIONS, YOU WON!\n");
+				
+				while(tempWhile)
+				{
+					printf("ENTER 1 TO PLAY AGAIN.\n");
+					printf("ENTER 2 TO DISCONNECT.\n");
+					tempChar = fgetc(stdin);
+					if ( (tempChar == '1' || tempChar == '2') && fgetc(stdin) == '\n')
+						tempWhile = 0;
+					
+					else
+					{
+						printf("BAD COMMAND!\n");
+						tempChar = fgetc(stdin);
+						while(tempChar != '\n')
+							tempChar = fgetc(stdin);
+					}
+				}
+
+				if (tempChar == '1')
+				{
+					//memset everything to 0
+					//maybe swap sides??
+				}
+				else if (tempChar == '2')
+				{
+					printf("DISCONNECTING...\n");
+					connected = 0;
+				}
+				buffer[0] = player + '0';
+				buffer[1] = tempChar;
+				send(s_socket, buffer, 2, 0);
+			}
+			
+			else if (strcmp(buffer, "OD") == 0)
 			{
 				printf("OPPONENT DISCONNECTED. YOU WIN!\n");
 				connected = 0;
@@ -157,12 +197,55 @@ int main(int argc, char *argv[])
 				printf("WAITING FOR OPPONENT MOVE...\n");
 				r_len = recv(s_socket, buffer, 2, 0);
 				
-				temp[0] = buffer[0];
-				temp[1] = buffer[1];
-				validateAndProcess(&board, &temp, &validateResponse, opponent);
-				printBoard(&board);
+				if (buffer[0] == 'W')
+				{
+					//looser
+					int tempWhile = 1;
+					char tempChar;
+					printf("UNFORTUNATELY, YOU LOST...\n");
+				
+					while(tempWhile)
+					{
+						printf("ENTER 1 TO PLAY AGAIN.\n");
+						printf("ENTER 2 TO DISCONNECT.\n");
+						tempChar = fgetc(stdin);
+						if ( (tempChar == '1' || tempChar == '2') && fgetc(stdin) == '\n')
+							tempWhile = 0;
+					
+						else
+						{
+							printf("BAD COMMAND!\n");
+							tempChar = fgetc(stdin);
+							while(tempChar != '\n')
+								tempChar = fgetc(stdin);
+						}
+					}
+
+
+					if (tempChar == '1')
+					{
+						//memset everything to 0
+						//maybe swap sides??
+					}
+					else if (tempChar == '2')
+					{
+						printf("DISCONNECTING...\n");
+						connected = 0;
+					}
+					buffer[0] = player + '0';
+					buffer[1] = tempChar;
+					send(s_socket, buffer, 2, 0);					
+				}
+				else
+				{
+					temp[0] = buffer[0];
+					temp[1] = buffer[1];
+					validateAndProcess(&board, &temp, &validateResponse, opponent);
+					printBoard(&board);
+				}
 			}
 		}
+		//clear = fgetc(stdin);
 	}
 	printf("DISCONNECTED");
 	close(s_socket);

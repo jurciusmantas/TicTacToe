@@ -161,11 +161,13 @@ int main(int argc, char *argv[])
 			else
 			{	
 				validateAndProcess(&board, &buffer, &processMoveRes, player);
+				checkForWinner(&board, &processMoveRes);
 				
 				if(processMoveRes[0] == 'O' && processMoveRes[1] == 'K')
 				{
 					//SEND PLAYER MOVE - TO OPPONENT
-					//SEND OK - 		 TO PLAYER
+					//SEND OK - 	   - TO PLAYER (if no win)
+					//SEND W{player}   - TO BOTH
 					if (player == 1)
 					{
 						send(c1_socket, processMoveRes, 2, 0);
@@ -177,6 +179,23 @@ int main(int argc, char *argv[])
 						send(c2_socket, processMoveRes, 2, 0);
 						send(c1_socket, buffer, 2, 0);
 						player = 1;
+					}
+				}
+				else if (processMoveRes[0] == 'W')
+				{
+					if (player == 1)
+					{
+						processMoveRes[1] = player + '0';
+						send(c2_socket, processMoveRes, 2, 0);
+						send(c2_socket, buffer, 2, 0);
+						send(c1_socket, processMoveRes, 2, 0);
+					}
+					else
+					{
+						processMoveRes[1] = player + '0';
+						send(c1_socket, processMoveRes, 2, 0);
+						send(c1_socket, buffer, 2, 0);
+						send(c2_socket, processMoveRes, 2, 0);
 					}
 				}
 				else
