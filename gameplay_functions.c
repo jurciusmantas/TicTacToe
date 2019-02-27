@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "server_header.h"
+#include "gameplay_header.h"
 
 void processMove(int (*board)[3][3], char (*buffer)[2], int player)
 {

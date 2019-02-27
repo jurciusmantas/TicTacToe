@@ -4,7 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "client_header.h"
-#include "server_header.h"
+#include "gameplay_header.h"
 #define HANDSHAKE "SERVER: CONNECTED PLAYER  "
 
 int main(int argc, char *argv[])
