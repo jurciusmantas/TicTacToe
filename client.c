@@ -72,6 +72,7 @@ int main(int argc, char *argv[])
 	char clear = '\n';
 	int r_len, s_len;
 	printf("PLAYER %d\n", player);
+	printBoard(&board);
 	if(player == 2)
 	{
 		printf("WAITING FOR OPPONENT MOVE...\n");
@@ -142,8 +143,13 @@ int main(int argc, char *argv[])
 			r_len = recv(s_socket, buffer, 2, 0);
 			
 			printf("SERVER SENT - %s\n", buffer);
+			if (buffer[0] == 'O' && buffer[1] == 'D')
+			{
+				printf("OPPONENT DISCONNECTED\n");
+				exit(1);
+			}
 			
-			if (buffer[0] == 'W')
+			else if (buffer[0] == 'W')
 			{
 				//winner
 				int tempWhile = 1;
@@ -166,20 +172,47 @@ int main(int argc, char *argv[])
 							tempChar = fgetc(stdin);
 					}
 				}
+				
+				buffer[0] = player + '0';
+				buffer[1] = tempChar;
+				printf("AFTER GAME WINNER RESPONSE - %c-%c\n", buffer[0], buffer[1]);
+				send(s_socket, buffer, 2, 0);
 
 				if (tempChar == '1')
 				{
-					//memset everything to 0
-					//maybe swap sides??
+					memset(&board, 0, sizeof(board));
+					memset(&validateResponse, 0, sizeof(validateResponse));
+					printf("CREATING NEW GAME...\n");
+					printBoard(&board);
+				
+					r_len = recv(s_socket, buffer, 2, 0);
+					printf("[DEBUG] RECV - %c-%c, length - %d\n", buffer[0], buffer[1], r_len);
+					if (r_len != 2 || buffer[0] != 'N' || buffer[1] != 'G')
+					{
+						printf("ERROR: CANNOT CREATE NEW GAME!\n");
+						exit(1);
+					}
+					
+					if (player == 2)
+					{
+						printf("WAITING FOR OPPONENT MOVE...\n");
+						r_len = recv(s_socket, buffer, 2, 0);
+						if (r_len != 2)
+						{
+							printf("ERROR: SERVER SENT BAD FORMAT MOVE");
+							exit(1);
+						}
+						temp[0] = buffer[0];
+						temp[1] = buffer[1];
+						validateAndProcess(&board, &temp, &validateResponse, 1);
+						printBoard(&board);
+					}
 				}
 				else if (tempChar == '2')
 				{
 					printf("DISCONNECTING...\n");
 					connected = 0;
 				}
-				buffer[0] = player + '0';
-				buffer[1] = tempChar;
-				send(s_socket, buffer, 2, 0);
 			}
 			
 			else if (strcmp(buffer, "OD") == 0)
@@ -202,6 +235,12 @@ int main(int argc, char *argv[])
 					//looser
 					int tempWhile = 1;
 					char tempChar;
+					r_len = recv(s_socket, buffer, 2, 0);
+					
+					temp[0] = buffer[0];
+					temp[1] = buffer[1];
+					validateAndProcess(&board, &temp, &validateResponse, opponent);
+					printBoard(&board);
 					printf("UNFORTUNATELY, YOU LOST...\n");
 				
 					while(tempWhile)
@@ -222,19 +261,46 @@ int main(int argc, char *argv[])
 					}
 
 
+					buffer[0] = player + '0';
+					buffer[1] = tempChar;
+					send(s_socket, buffer, 2, 0);
+					printf("AFTER GAME WINNER RESPONSE - %c-%c\n", buffer[0], buffer[1]);
+				
 					if (tempChar == '1')
 					{
-						//memset everything to 0
-						//maybe swap sides??
+						memset(&board, 0, sizeof(board));
+						memset(&validateResponse, 0, sizeof(validateResponse));
+						printf("CREATING NEW GAME...\n");
+						printBoard(&board);
+				
+						r_len = recv(s_socket, buffer, 2, 0);
+						printf("RECV - %c-%c, length - %d\n", buffer[0], buffer[1], r_len);
+						if (r_len != 2 || buffer[0] != 'N' || buffer[1] != 'G')
+						{
+							printf("ERROR: CANNOT CREATE NEW GAME!\n");
+							exit(1);
+						}
+						
+						if (player == 2)
+						{
+							printf("WAITING FOR OPPONENT MOVE...\n");
+							r_len = recv(s_socket, buffer, 2, 0);
+							if (r_len != 2)
+							{
+								printf("ERROR: SERVER SENT BAD FORMAT MOVE");
+								exit(1);
+							}
+							temp[0] = buffer[0];
+							temp[1] = buffer[1];
+							validateAndProcess(&board, &temp, &validateResponse, 1);
+							printBoard(&board);
+						}
 					}
 					else if (tempChar == '2')
 					{
 						printf("DISCONNECTING...\n");
 						connected = 0;
-					}
-					buffer[0] = player + '0';
-					buffer[1] = tempChar;
-					send(s_socket, buffer, 2, 0);					
+					}					
 				}
 				else
 				{

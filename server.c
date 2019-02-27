@@ -117,21 +117,21 @@ int main(int argc, char *argv[])
 		int connected = 1;
 		int player = 1;
 		char processMoveRes[2];
+		char buffer[2];
 		
 		while(connected)
 		{
-			char buffer[2];
 			memset(&buffer, 0, sizeof(buffer));
 			//LISTEN MODE
 			if(player == 1)
-				s_len = recv(c1_socket, buffer, 2, 0);
+				r_len = recv(c1_socket, buffer, 2, 0);
 			else if (player == 2)
-				s_len = recv(c2_socket, buffer, 2, 0);
+				r_len = recv(c2_socket, buffer, 2, 0);
 
 			printf("MESSAGE PROCESSING : %c%c FROM PLAYER %d\n", buffer[0],buffer[1], player);
 			//COMMANDS:
 			//DC - Disconnect
-			if (s_len != 2 && strstr(buffer,"DC") != NULL)
+			if (r_len == 2 && strstr(buffer,"DC") != NULL)
 			{
 				if(player==1)
 				{
@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
 			//VALIDATE MESSAGE FORMAT
 			//MESSAGE LENGTH = 2
 			//MOVE FORMAT - [A-C][1-3]
-			else if (s_len != 2 || buffer[0] < 'A' || buffer[0] > 'C' 
+			else if (r_len != 2 || buffer[0] < 'A' || buffer[0] > 'C' 
 				|| buffer[1] < '1' || buffer[1] > '3')
 			{
 				printf("ERROR: BAD MOVE FORMAT FROM PLAYER %d \n", player);
@@ -167,7 +167,7 @@ int main(int argc, char *argv[])
 				{
 					//SEND PLAYER MOVE - TO OPPONENT
 					//SEND OK - 	   - TO PLAYER (if no win)
-					//SEND W{player}   - TO BOTH
+					//SEND W{player}   - TO BOTH IF WIN
 					if (player == 1)
 					{
 						send(c1_socket, processMoveRes, 2, 0);
@@ -183,8 +183,10 @@ int main(int argc, char *argv[])
 				}
 				else if (processMoveRes[0] == 'W')
 				{
+					printf("WINNER IS PLAYER ");
 					if (player == 1)
 					{
+						printf("1!\n"); 
 						processMoveRes[1] = player + '0';
 						send(c2_socket, processMoveRes, 2, 0);
 						send(c2_socket, buffer, 2, 0);
@@ -192,11 +194,50 @@ int main(int argc, char *argv[])
 					}
 					else
 					{
+						printf("2!\n");
 						processMoveRes[1] = player + '0';
 						send(c1_socket, processMoveRes, 2, 0);
 						send(c1_socket, buffer, 2, 0);
 						send(c2_socket, processMoveRes, 2, 0);
 					}
+					printf("WAITING ACTIONS FROM BOTH PLAYERS...\n");
+					
+					r_len = recv(c1_socket, buffer, 2, 0);
+					s_len = recv(c2_socket, processMoveRes, 2, 0);
+					
+					if(s_len != 2 || r_len != 2)
+					{
+						printf("ERROR: CLIENT DISCONNECTED\n");
+						exit(1);
+					}
+					
+					else if (buffer[0] == '1' && buffer[1] == '1' 
+						&& processMoveRes[0] == '2' && processMoveRes[1] == '1')
+					{
+						memset(&board, 0, sizeof(board));
+						memset(&processMoveRes, 0, sizeof(processMoveRes));
+						
+						strcpy(buffer, "NG");
+						send(c1_socket, buffer, 2, 0);
+						send(c2_socket, buffer, 2, 0);
+						
+						player = 1;
+					}
+					else if (buffer[0] == '1' && buffer[1] == '2')
+					{
+						printf("CLIENT 1 DISCONNECTED.\n");
+						connected = 0;
+					}
+					else if (processMoveRes[0] == '1' && processMoveRes[1] == '2')
+					{
+						printf("CLIENT 2 DISCONNECTED.\n");
+						connected = 0;
+					}
+					else
+					{
+						printf("ERROR\n");
+						connected = 0;
+					}	
 				}
 				else
 				{
