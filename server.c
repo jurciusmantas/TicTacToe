@@ -116,6 +116,7 @@ int main(int argc, char *argv[])
 		//recv() call
 		int connected = 1;
 		int player = 1;
+		char processMoveRes[2];
 		
 		while(connected)
 		{
@@ -130,7 +131,7 @@ int main(int argc, char *argv[])
 			printf("MESSAGE PROCESSING : %c%c FROM PLAYER %d\n", buffer[0],buffer[1], player);
 			//COMMANDS:
 			//DC - Disconnect
-			if (strstr(buffer,"DC") != NULL)
+			if (s_len != 2 && strstr(buffer,"DC") != NULL)
 			{
 				if(player==1)
 				{
@@ -152,25 +153,35 @@ int main(int argc, char *argv[])
 			else if (s_len != 2 || buffer[0] < 'A' || buffer[0] > 'C' 
 				|| buffer[1] < '1' || buffer[1] > '3')
 			{
-				printf("ERROR: BAD MOVE FORMAT FROM CLIENT \n");
+				printf("ERROR: BAD MOVE FORMAT FROM PLAYER %d \n", player);
 				exit(1);
 			}
 			
-			//PROCCESS MOVE
+			//PROCESS MOVE
 			else
 			{	
-				processMove(&board, &buffer, player);
-				printf("BUFFER = %c %c", buffer[0], buffer[1]);
+				validateAndProcess(&board, &buffer, &processMoveRes, player);
 				
-				if (player == 1)
+				if(processMoveRes[0] == 'O' && processMoveRes[1] == 'K')
 				{
-					send(c1_socket, buffer, 2, 0);
-					player = 2;
+					//SEND PLAYER MOVE - TO OPPONENT
+					//SEND OK - 		 TO PLAYER
+					if (player == 1)
+					{
+						send(c1_socket, processMoveRes, 2, 0);
+						send(c2_socket, buffer, 2, 0);
+						player = 2;
+					}
+					else
+					{
+						send(c2_socket, processMoveRes, 2, 0);
+						send(c1_socket, buffer, 2, 0);
+						player = 1;
+					}
 				}
 				else
 				{
-					send(c2_socket, buffer, 2, 0);
-					player = 1;
+					//process NO
 				}
 			}
 		}

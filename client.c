@@ -14,7 +14,6 @@ int main(int argc, char *argv[])
 	unsigned int port;
 	int s_socket;
 	struct sockaddr_in servaddr;
-	int player = 0;
 	
 	int board[3][3];
 	memset(&board, 0, sizeof(board));
@@ -65,11 +64,28 @@ int main(int argc, char *argv[])
 	recv(s_socket, handshake, strlen(HANDSHAKE), 0);
 	printf("%s\n", handshake);
 	
-	player = handshake[strlen(HANDSHAKE) - 1] - '0';
+	int player = handshake[strlen(HANDSHAKE) - 1] - '0';
+	int opponent = player + 1 > 2 ? 1 : 2;
 	char buffer[3];
+	char temp[2];
+	char validateResponse[2];
 	char clear = '\n';
 	int r_len, s_len;
 	printf("PLAYER %d\n", player);
+	if(player == 2)
+	{
+		printf("WAITING FOR OPPONENT MOVE...\n");
+		r_len = recv(s_socket, buffer, 2, 0);
+		if (r_len != 2)
+		{
+			printf("ERROR: SERVER SENT BAD FORMAT MOVE");
+			exit(1);
+		}
+		temp[0] = buffer[0];
+		temp[1] = buffer[1];
+		validateAndProcess(&board, &temp, &validateResponse, 1);
+		printBoard(&board);
+	}
 	
 	int connected = 1;
 	while(connected)
@@ -91,24 +107,41 @@ int main(int argc, char *argv[])
 			connected = 0;
 		}
 		
-		//PLACE TO VALIDATE MESSAGE
+		//VALIDATE MESSAGE FORMAT
 		else if(buffer[0] < 'A' || buffer[0] > 'C' || buffer[1] < '1'
 			|| buffer[1] > '3' || buffer[2] != '\n')
 		{
 			printf("ERROR: BAD MESSAGE FORMAT!\n");
 			continue;
 		}
-	
 		else
 		{
-			r_len = send(s_socket, buffer, 2, 0);
-			printf("MESSAGE SENT - [0] = %c, [1] = %c, [2] = %c\n", buffer[0], buffer[1], buffer[2]);
+			//TODO: 
+			//0. VALIDATE MOVE
+			//1. SEND SERVER MOVE
+			//2. GET OK
+			//3. GET OPPONENT MOVE
 			
-			memset(&buffer, 0, sizeof(buffer));
-			//WAIT FOR "OK"
+			//0			
+			temp[0] = buffer[0];
+			temp[1] = buffer[1];
+			validateAndProcess(&board, &temp, &validateResponse, player);
+			if (strcmp(validateResponse,"OK") != 0)
+			{
+				printf("ERROR:BAD MOVE\n");
+				continue;
+			}
+			printBoard(&board);
+			
+			//1
+			send(s_socket, buffer, 2, 0);
+			
+			//2
+			memset(&buffer, 0, sizeof(buffer));			
 			printf("WAITING FOR OK...\n");
-			s_len = recv(s_socket, buffer, 2, 0);
+			r_len = recv(s_socket, buffer, 2, 0);
 			printf("SERVER SENT - %s\n", buffer);
+			
 			if (strcmp(buffer, "OD") == 0)
 			{
 				printf("OPPONENT DISCONNECTED. YOU WIN!\n");
@@ -118,12 +151,15 @@ int main(int argc, char *argv[])
 			{
 				printf("ERROR: BAD MOVE\n");
 			}
+			//3
 			else if (strcmp(buffer, "OK") == 0)
 			{
-				char temp[2];
+				printf("WAITING FOR OPPONENT MOVE...\n");
+				r_len = recv(s_socket, buffer, 2, 0);
+				
 				temp[0] = buffer[0];
 				temp[1] = buffer[1];
-				processMove(&board, &temp, player);
+				validateAndProcess(&board, &temp, &validateResponse, opponent);
 				printBoard(&board);
 			}
 		}
