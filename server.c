@@ -184,11 +184,18 @@ int main(int argc, char *argv[])
 				else if (processMoveRes[0] == 'W')
 				{
 					printf("WINNER IS PLAYER ");
+					// Send looser opponent move
+					if (player == 1)
+						send(c2_socket, processMoveRes, 2, 0);
+					else
+						send(c1_socket, processMoveRes, 2, 0);
+					
+					// Send both message that
+					// winner is noticed
 					if (player == 1)
 					{
 						printf("1!\n"); 
 						processMoveRes[1] = player + '0';
-						send(c2_socket, processMoveRes, 2, 0);
 						send(c2_socket, buffer, 2, 0);
 						send(c1_socket, processMoveRes, 2, 0);
 					}
@@ -196,7 +203,6 @@ int main(int argc, char *argv[])
 					{
 						printf("2!\n");
 						processMoveRes[1] = player + '0';
-						send(c1_socket, processMoveRes, 2, 0);
 						send(c1_socket, buffer, 2, 0);
 						send(c2_socket, processMoveRes, 2, 0);
 					}
