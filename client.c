@@ -7,16 +7,25 @@
 #include "gameplay_header.h"
 #define HANDSHAKE "SERVER: CONNECTED PLAYER  "
 
+typedef struct _SOCKET_INFORMATION {
+   
+   char Buffer[5];
+   SOCKET Socket;
+   int Board[3][3];
+   
+} SOCKET_INFORMATION, * SOCKETINFORMATION;
+
 int main(int argc, char *argv[])
 {
 	WSADATA data;
-	
+	SOCKETINFORMATION SocketInfo;
 	unsigned int port;
 	int s_socket;
 	struct sockaddr_in servaddr;
+	FD_SET WriteSet;
+	FD_SET ReadSet;
 	
-	int board[3][3];
-	memset(&board, 0, sizeof(board));
+	memset(&SocketInfo, 0, sizeof(SocketInfo));
 	
 	if(argc != 3)
 	{
@@ -37,7 +46,8 @@ int main(int argc, char *argv[])
 	//STEP 1
 	//Server Socket CREATION with
 	//socket() call
-	if ((s_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+
+	if ((SocketInfo->Socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
 		printf("ERROR: CANNOT CREATE SERVER SOCKET");
 		exit(1);
@@ -51,7 +61,7 @@ int main(int argc, char *argv[])
 	//STEP 4
 	//Server Socket CONNECT with
 	//connect() call
-	if (connect(s_socket, (struct sockaddr*)&servaddr, sizeof(servaddr))<0)
+	if (connect(SocketInfo->Socket, (struct sockaddr*)&servaddr, sizeof(servaddr))<0)
 	{
 		printf("ERROR: CONNECTING TO SERVER");
 		exit(1);
@@ -61,36 +71,124 @@ int main(int argc, char *argv[])
 	memset(&handshake, 0, sizeof(HANDSHAKE));
 	
 	//Wait for handshake
-	recv(s_socket, handshake, strlen(HANDSHAKE), 0);
+	recv(SocketInfo->Socket, handshake, strlen(HANDSHAKE), 0);
 	printf("%s\n", handshake);
 	
 	int player = handshake[strlen(HANDSHAKE) - 1] - '0';
-	int opponent = player + 1 > 2 ? 1 : 2;
-	char buffer[3];
-	char temp[2];
+	int opponent = player == 1 ? 1 : 2;
+	int expectingOk = 0;
+	
+	SocketInfo->Buffer[0]='\n';
 	char validateResponse[2];
-	char clear = '\n';
 	int r_len, s_len;
 	printf("PLAYER %d\n", player);
-	printBoard(&board);
+	printBoard(&(SocketInfo->Board));
 	if(player == 2)
 	{
 		printf("WAITING FOR OPPONENT MOVE...\n");
-		r_len = recv(s_socket, buffer, 2, 0);
-		if (r_len != 2)
+		r_len = recv(SocketInfo->Socket, SocketInfo->Buffer, 5, 0);
+		if (r_len != 5 || ValidateMove(SocketInfo->Buffer) != 1)
 		{
 			printf("ERROR: SERVER SENT BAD FORMAT MOVE");
 			exit(1);
 		}
-		temp[0] = buffer[0];
-		temp[1] = buffer[1];
-		validateAndProcess(&board, &temp, &validateResponse, 1);
-		printBoard(&board);
+		
+		if (ProcessMove(&(SocketInfo->Board), SocketInfo->Buffer, player) != 1)
+		{
+			printf("ERROR: CANNOT PROCESS MOVE");
+			exit(1);
+		}
+		
+		printBoard(&(SocketInfo->Board));
 	}
 	
+	memset(&(SocketInfo->Buffer), 0, sizeof(SocketInfo->Buffer));
+	printf("[DEBUG] SocketInfo->Buffer = %s\n", SocketInfo->Buffer);
+	SocketInfo->Buffer[0] = '\n';
+	
 	int connected = 1;
+	
 	while(connected)
 	{
+		FD_ZERO(&WriteSet);
+		FD_ZERO(&ReadSet);
+		
+		if (SocketInfo->Buffer[0] == '\n')
+			FD_SET(SocketInfo->Socket, &WriteSet);
+		else
+			FD_SET(SocketInfo->Socket, &ReadSet);
+		
+		if (FD_ISSET(SocketInfo->Socket, &WriteSet))
+		{	
+			while (1)
+			{
+				printf("Enter your move: ");
+				scanf("5%s", SocketInfo->Buffer);
+				//						?????????? memsetas padaro 0 ar '0'?
+				if (SocketInfo->Buffer[3] != '0' && ValidateMove(SocketInfo->Buffer) != 1)
+				{
+					printf("BAD MOVE FORMAT!\n");
+					continue;
+				}
+				
+				if (ProcessMove(&(SocketInfo->Board), SocketInfo->Buffer, player) != 1)
+				{
+					printf("CELL IS ALREADY TAKEN!\n");
+					continue;
+				}
+			
+				break;
+			}
+			
+			printBoard(&(SocketInfo->Board));
+			send(SocketInfo->Socket, SocketInfo->Buffer, 5, 0);
+		}
+		
+		if (FD_ISSET(SocketInfo->Socket, &ReadSet))
+		{
+			printf("Receiving from server...\n");
+			r_len = recv(SocketInfo->Socket, SocketInfo->Buffer, 5, 0);
+
+			if (r_len == SOCKET_ERROR)
+			{
+				printf("ERROR: SERVER SOCKET\n");
+				exit(1);
+			}
+			
+			if (r_len == 0)
+			{
+				printf("Graceful close?\n");
+				exit(1);
+			}
+			
+
+			if (r_len == 5)
+			{
+				//SERVER MSG:
+				//opponent move + OK + \n
+				if (ValidateServerMessage(SocketInfo->Buffer) == 1)
+				{
+					if (ProcessMove(&(SocketInfo->Board), SocketInfo->Buffer, opponent) != 1)
+					{
+						printf("ERROR: Processing opponent move\n");
+						exit(1);
+					}
+					
+					printBoard(&(SocketInfo->Board));
+					memset(&(SocketInfo->Buffer), 0, sizeof(SocketInfo->Buffer));
+					SocketInfo->Buffer[0] = '\n';
+				}
+			}
+			else
+			{
+				printf("ERROR: SERVER BAD MSG");
+				exit(1);
+			}
+		}
+		
+		/**************\
+		/***OLD LOGIC**\
+		/**************\
 		//CLEAR STDIN
 		while(clear != '\n')
 			clear = fgetc(stdin);
@@ -311,9 +409,9 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
-		//clear = fgetc(stdin);
+		*/
 	}
 	printf("DISCONNECTED");
-	close(s_socket);
+	close(SocketInfo->Socket);
 	return 0;
 }

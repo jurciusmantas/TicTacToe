@@ -1,4 +1,5 @@
 #include <winsock2.h>
+#include <windows.h>
 #define socklen_t int
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,13 +7,39 @@
 #include <unistd.h>
 #include "gameplay_header.h"
 
+typedef struct _SOCKET_PAIR_INFORMATION {
+   
+   char Buffer1[5];
+   SOCKET Socket1;
+   char Buffer2[5];
+   
+   SOCKET Socket2;
+   BOOL IsPairReady;
+   int Board[3][3];
+   
+} SOCKET_PAIR_INFORMATION, * LPSOCKET_PAIR_INFORMATION;
+
+BOOL AssignPairForSocket(SOCKET s);
+BOOL CreateSocketInformation(SOCKET s);
+void FreeSocketInformation(DWORD Index);
+
+//Global
+DWORD TotalSocketPairs = 0;
+LPSOCKET_PAIR_INFORMATION SocketArray[FD_SETSIZE];
+
 int main(int argc, char *argv[])
 {
 	WSADATA data;
 	unsigned int port;
 	int l_socket;
-	int c1_socket;
-	int c2_socket;
+	
+	int c_socket;
+	
+	int i,j;
+	int player = 1;
+	unsigned long NonBlock;
+	FD_SET ReadSet;
+	FD_SET WriteSet;
 	
 	struct sockaddr_in servaddr;
 	struct sockaddr_in clientaddr1;
@@ -24,8 +51,9 @@ int main(int argc, char *argv[])
 	int s_len;
 	int r_len;
 	
-	int board[3][3];
-	memset(&board, 0, sizeof(board));
+	char hiConn1[] = "SERVER: CONNECTED PLAYER 1";
+	char hiConn2[] = "SERVER: CONNECTED PLAYER 2";
+	char temp[2];
 	
 	if (argc != 2)
 	{
@@ -53,10 +81,13 @@ int main(int argc, char *argv[])
 		printf("ERROR: CANNOT CREATE LISTEN SOCKET \n");
 		exit(1);
 	}
+	else
+		printf("CREATING SOCKET - OK\n");
 	
 	//STEP 2
 	//Server Socket BINDING with
 	//bind() call
+	
 	memset(&servaddr, 0, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -67,53 +98,232 @@ int main(int argc, char *argv[])
 		printf("ERROR: BINDING LISTEN SOCKET \n");
 		exit(1);
 	}
+	else
+		printf("LISTEN SOCKET CREATING - OK\n");
 	
 	//STEP 3
 	//Server Socket LISTENing with
 	//listen() call
-	if (listen(l_socket, 2) < 0)
+	if (listen(l_socket, 6) < 0)
 	{
-		printf("ERROR: TOO MANY CLIENTS \n");
+		printf("ERROR: LISTEN SOCKET \n");
 		exit(1);
 	}
+	else
+		printf("LISTEN SOCKET - OK\n");
 	
-	for(;;)
+	NonBlock = 1;
+	if (ioctlsocket(l_socket, FIONBIO, &NonBlock) == SOCKET_ERROR)
 	{
-		memset(&clientaddr1, 0, sizeof(clientaddr1));
-		clientaddr1len = sizeof(clientaddr1);		
-		memset(&clientaddr2, 0, sizeof(clientaddr2));
-		clientaddr2len = sizeof(clientaddr2);
+		printf("ERROR: MAKING LISTEN SOCKET NONBLOCKING FAILED\n");
+		exit(1);
+	}
+	else
+		printf("MAKING LISTEN SOCKET NONBLOCKING - OK\n");
+	
+	while(TRUE)
+	{
+		FD_ZERO(&ReadSet);
+		FD_ZERO(&WriteSet);
+		
+		for(i = 0; i < TotalSocketPairs; i++)
+		{
+			if (SocketArray[i]->Buffer1[0] == '\n')
+				FD_SET(SocketArray[i]->Socket1, &ReadSet);
+			else
+				FD_SET(SocketArray[i]->Socket1, &WriteSet);
+			
+			if(SocketArray[i]->Socket2 != 0)
+			{
+				if (SocketArray[i]->Buffer2[0] == '\n')
+					FD_SET(SocketArray[i]->Socket2, &ReadSet);
+				else
+					FD_SET(SocketArray[i]->Socket2, &WriteSet);
+			}
+		}
+		
+		FD_SET(l_socket, &ReadSet);
+		
+		if (select(0, &ReadSet, &WriteSet, NULL, NULL) == SOCKET_ERROR)
+		{
+			printf("ERROR: SELECT RETURNED SOCKET_ERROR");
+			exit(1);
+		}
+		else
+			printf("SELECT - OK\n");
 
-		//STEP 5
-		//Server Socket LISTENing with
-		//listen() call
-		char hiConn1[] = "SERVER: CONNECTED PLAYER 1";
-		char hiConn2[] = "SERVER: CONNECTED PLAYER 2";
+		//Checking for arriving connections
+		if (FD_ISSET(l_socket, &ReadSet))
+		{	
+			//STEP 5
+			//Server Socket LISTENing with
+			//listen() call
 		
-		//HANDSHAKE
-		printf("SENDING HANDSHAKE\n");
-		
-		if ((c1_socket = accept(l_socket, (struct sockaddr* )&clientaddr1, &clientaddr1len)) <0 )
-		{
-			printf("ERROR: ACCEPTING SOCKET 1 \n");
-			exit(1);
+			if ((c_socket = accept(l_socket, NULL, NULL)) != INVALID_SOCKET )
+			{
+				// Make client socket non blocking
+				NonBlock = 1;
+				if (ioctlsocket(c_socket, FIONBIO, &NonBlock) == SOCKET_ERROR)
+				{
+					printf("ERROR: MAKING CLIENT SOCKET NONBLOCKING\n");
+					exit(1);
+				}
+				else
+					printf("CLIENT SOCKET NONBLOCKING - OK\n");
+				
+				if (player == 1)
+				{
+					if(CreateSocketInformation(c_socket) == FALSE)
+					{
+						printf("ERROR: CreateSocketInformation()\n");
+						exit(1);
+					}
+					else
+						printf("CreateSocketInformation() - OK\n");
+					
+					send(c_socket, hiConn1, strlen(hiConn1), 0);
+					player++;
+					SocketArray[TotalSocketPairs]->Buffer1[0] = '\n';
+				}
+				else
+				{
+					if (AssignPairForSocket(c_socket) == FALSE)
+					{
+						printf("ERROR: ASSIGNING PAIR\n");
+						exit(1);
+					}
+					else
+						printf("ASSIGNING PAIR - OK\n");
+					
+					send(c_socket, hiConn2, strlen(hiConn1), 0);
+					player--;
+					strcpy(SocketArray[TotalSocketPairs-1]->Buffer2, SocketArray[TotalSocketPairs-1]->Buffer1);
+				}
+			}
+			else
+			{
+				printf("ERROR: ACCEPTING SOCKET\n");
+				exit(1);
+			}
 		}
-		send(c1_socket, hiConn1, strlen(hiConn1), 0);
 		
-		if ((c2_socket = accept(l_socket, (struct sockaddr* )&clientaddr2, &clientaddr2len)) <0 )
-		{
-			printf("ERROR: ACCEPTING SOCKET 2 \n");
-			exit(1);
+		//****************************\\
+		//***********PLAYER 1*********\\
+		//****************************\\
+		//Check for ReadSet and WriteSet 
+		//For every player 1 socket in pairs
+		printf("Checking player 1 sockets\n");
+		for (i = 0; i < TotalSocketPairs; i++)
+		{	
+			if (FD_ISSET(SocketArray[i]->Socket1, &ReadSet))
+			{	
+				r_len = recv(SocketArray[i]->Socket1, SocketArray[i]->Buffer1, 2, 0);
+				if(r_len == SOCKET_ERROR)
+				{
+					printf("ERROR: recv() WITH PLAYER 1 PAIR NUMBER %d\n", i);
+				}
+				else if (r_len == 0)
+					printf("ASSERT: Gracefull close? Player 1 pair %d\n", i);
+				else
+					printf("recv() - OK. PLAYER 1 FROM PAIR %d SENT %s\n", i, SocketArray[i]->Buffer1);
+				
+				if (ValidateMove(SocketArray[i]->Buffer1) != 1)
+				{
+					printf("ERROR: SERVER SENT BAD MOVE");
+					exit(1);
+				}
+				
+				ProcessMove(&(SocketArray[i]->Board), Socket
+				strcpy(SocketArray[i]->Buffer1, "OK");
+				continue;
+			}
+			
+			if (FD_ISSET(SocketArray[i]->Socket1, &WriteSet))
+			{
+				//temp - when client
+				//will be rewritten then
+				//send full buffer - len 5
+				s_len = send(SocketArray[i]->Socket1, SocketArray[i]->Buffer1, 2, 0);
+				
+				if(s_len == SOCKET_ERROR)
+				{
+					printf("ERROR: send() WITH PLAYER 1 PAIR NUMBER %d\n", i);
+				}
+				else
+				{
+					printf("send() WITH PLAYER 1 PAIR NUMBER %d - OK\n", i);
+				}
+
+				SocketArray[i]->Buffer1[0] = '\n';
+				
+				//SERVER PLACE TO
+				//PROCESS SERVER MSG
+			}
 		}
-		send(c2_socket, hiConn2, strlen(hiConn2), 0);
+		printf("Player 1 sockets - OK\n");
+		printf("Checking player 2 sockets\n");
 		
-		printf("CLIENTS CONNECTED :\n");
-		printf("IP1   : %s \n", inet_ntoa(clientaddr1.sin_addr));
-		printf("IP2   : %s \n", inet_ntoa(clientaddr2.sin_addr));
+		//****************************\\
+		//***********PLAYER 2*********\\
+		//****************************\\
+		//Check for ReadSet and WriteSet 
+		//For every player 2 socket in pairs
+		for (i = 0; i < TotalSocketPairs; i++)
+		{
+			if (FD_ISSET(SocketArray[i]->Socket2, &ReadSet))
+			{	
+				r_len = recv(SocketArray[i]->Socket2, SocketArray[i]->Buffer2, 2, 0);
+				if(r_len == SOCKET_ERROR)
+				{
+					printf("ERROR: recv() WITH PLAYER 2 PAIR NUMBER %d\n", i);
+				}
+				else if (r_len == 0)
+					printf("ASSERT: Gracefull close? Player 2 pair %d\n", i);
+				else
+					printf("recv() - OK. PLAYER 2 FROM PAIR %d SENT %s\n", i, SocketArray[i]->Buffer2);
+				
+
+				//VALIDATE CLIENT MOVE??
+				strcpy(SocketArray[i]->Buffer2, "OK");
+				
+				if (ValidateMove(SocketArray[i]->Buffer2)
+				
+				continue;
+			}
+			
+			if (FD_ISSET(SocketArray[i]->Socket2, &WriteSet))
+			{
+				//temp - when client
+				//will be rewritten then
+				//send full buffer - len 5
+				s_len = send(SocketArray[i]->Socket2, SocketArray[i]->Buffer2, 2, 0);
+				
+				if(s_len == SOCKET_ERROR)
+				{
+					printf("ERROR: send() WITH PLAYER 2 PAIR NUMBER %d\n", i);
+				}
+				else
+				{
+					//FD_SET(SocketArray[i]->Socket2, &ReadSet);
+					printf("send() WITH PLAYER 2 PAIR NUMBER %d - OK\n", i);
+				}
+				
+				SocketArray[i]->Buffer2[0] = '\n';
+				
+				//SERVER PLACE TO
+				//PROCESS SERVER MSG
+			}
+		}
+		printf("Player 2 sockets - OK\n\n--\n");
 		
+		
+		//****************************\\
+		//***********OLD LOGIC********\\
+		//****************************\\
 		//STEP 6
 		//Client Socket RECEIVE with
 		//recv() call
+		/*
 		int connected = 1;
 		int player = 1;
 		char processMoveRes[2];
@@ -124,7 +334,7 @@ int main(int argc, char *argv[])
 			memset(&buffer, 0, sizeof(buffer));
 			//LISTEN MODE
 			if(player == 1)
-				r_len = recv(c1_socket, buffer, 2, 0);
+				r_len = recv(c_socket, buffer, 2, 0);
 			else if (player == 2)
 				r_len = recv(c2_socket, buffer, 2, 0);
 
@@ -141,7 +351,7 @@ int main(int argc, char *argv[])
 				else
 				{
 					printf("CLIENT 2 DISCONNECTED");
-					send(c1_socket, "OD", 2, 0);
+					send(c_socket, "OD", 2, 0);
 				}
 				
 				connected = 0;
@@ -170,14 +380,14 @@ int main(int argc, char *argv[])
 					//SEND W{player}   - TO BOTH IF WIN
 					if (player == 1)
 					{
-						send(c1_socket, processMoveRes, 2, 0);
+						send(c_socket, processMoveRes, 2, 0);
 						send(c2_socket, buffer, 2, 0);
 						player = 2;
 					}
 					else
 					{
 						send(c2_socket, processMoveRes, 2, 0);
-						send(c1_socket, buffer, 2, 0);
+						send(c_socket, buffer, 2, 0);
 						player = 1;
 					}
 				}
@@ -188,7 +398,7 @@ int main(int argc, char *argv[])
 					if (player == 1)
 						send(c2_socket, processMoveRes, 2, 0);
 					else
-						send(c1_socket, processMoveRes, 2, 0);
+						send(c_socket, processMoveRes, 2, 0);
 					
 					// Send both message that
 					// winner is noticed
@@ -197,18 +407,18 @@ int main(int argc, char *argv[])
 						printf("1!\n"); 
 						processMoveRes[1] = player + '0';
 						send(c2_socket, buffer, 2, 0);
-						send(c1_socket, processMoveRes, 2, 0);
+						send(c_socket, processMoveRes, 2, 0);
 					}
 					else
 					{
 						printf("2!\n");
 						processMoveRes[1] = player + '0';
-						send(c1_socket, buffer, 2, 0);
+						send(c_socket, buffer, 2, 0);
 						send(c2_socket, processMoveRes, 2, 0);
 					}
 					printf("WAITING ACTIONS FROM BOTH PLAYERS...\n");
 					
-					r_len = recv(c1_socket, buffer, 2, 0);
+					r_len = recv(c_socket, buffer, 2, 0);
 					s_len = recv(c2_socket, processMoveRes, 2, 0);
 					
 					if(s_len != 2 || r_len != 2)
@@ -224,7 +434,7 @@ int main(int argc, char *argv[])
 						memset(&processMoveRes, 0, sizeof(processMoveRes));
 						
 						strcpy(buffer, "NG");
-						send(c1_socket, buffer, 2, 0);
+						send(c_socket, buffer, 2, 0);
 						send(c2_socket, buffer, 2, 0);
 						
 						player = 1;
@@ -251,8 +461,62 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
-		close(c1_socket);
-		close(c2_socket);
 		return 0;
+		*/
 	}
+}
+
+
+BOOL CreateSocketInformation(SOCKET s)
+{
+   LPSOCKET_PAIR_INFORMATION SI;
+   printf("Accepted socket number %d\n", s);
+   
+   if ((SI = (LPSOCKET_PAIR_INFORMATION) GlobalAlloc(GPTR, sizeof(SOCKET_PAIR_INFORMATION))) == NULL)
+   {
+      printf("ERROR: CREATING GLOBAL SPACE FOR SOCKET %d INFO\n", s);
+      return FALSE;
+   }
+   else
+      printf("CREATING GLOBAL SPACE FOR SOCKET %d INFO - OK\n", s);
+
+   // Prepare structure for use
+   SI->Socket1 = s;
+   
+   SI->Socket2 = 0;
+   
+   SI->IsPairReady = FALSE;
+   memset(SI->Board, 0, sizeof(SI->Board));
+   
+   SocketArray[TotalSocketPairs] = SI;
+   return(TRUE);
+}
+
+BOOL AssignPairForSocket(SOCKET s)
+{
+	printf("Accepted socket number %d\n", s);
+	
+	//send first player notification that pair is found???
+	
+	SocketArray[TotalSocketPairs]->Socket2 = s;
+	TotalSocketPairs++;
+}
+
+void FreeSocketInformation(DWORD Index)
+{
+   LPSOCKET_PAIR_INFORMATION SI = SocketArray[Index];
+   DWORD i;
+
+   closesocket(SI->Socket1);
+   closesocket(SI->Socket2);
+   printf("Closing sockets number %d and %d\n", SI->Socket1, SI->Socket2);
+   GlobalFree(SI);
+
+   // Squash the socket array
+   for (i = Index; i < TotalSocketPairs; i++)
+   {
+      SocketArray[i] = SocketArray[i + 1];
+   }
+
+   TotalSocketPairs--;
 }
