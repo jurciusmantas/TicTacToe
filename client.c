@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 	FD_SET WriteSet;
 	FD_SET ReadSet;
 	
-	memset(&SocketInfo, 0, sizeof(SocketInfo));
+	SocketInfo = malloc(sizeof(SOCKETINFORMATION));
 	
 	if(argc != 3)
 	{
@@ -82,6 +82,7 @@ int main(int argc, char *argv[])
 	char validateResponse[2];
 	int r_len, s_len;
 	printf("PLAYER %d\n", player);
+	memset(SocketInfo->Board, 0, sizeof(SocketInfo->Board));
 	printBoard(&(SocketInfo->Board));
 	if(player == 2)
 	{
@@ -103,8 +104,8 @@ int main(int argc, char *argv[])
 	}
 	
 	memset(&(SocketInfo->Buffer), 0, sizeof(SocketInfo->Buffer));
+	strcpy(SocketInfo->Buffer, "\n");
 	printf("[DEBUG] SocketInfo->Buffer = %s\n", SocketInfo->Buffer);
-	SocketInfo->Buffer[0] = '\n';
 	
 	int connected = 1;
 	
@@ -123,9 +124,8 @@ int main(int argc, char *argv[])
 			while (1)
 			{
 				printf("Enter your move: ");
-				scanf("5%s", SocketInfo->Buffer);
-				//						?????????? memsetas padaro 0 ar '0'?
-				if (SocketInfo->Buffer[3] != '0' && ValidateMove(SocketInfo->Buffer) != 1)
+				gets(SocketInfo->Buffer);
+				if (SocketInfo->Buffer[3] != 0 && ValidateMove(SocketInfo->Buffer) != 1)
 				{
 					printf("BAD MOVE FORMAT!\n");
 					continue;
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
 					
 					printBoard(&(SocketInfo->Board));
 					memset(&(SocketInfo->Buffer), 0, sizeof(SocketInfo->Buffer));
-					SocketInfo->Buffer[0] = '\n';
+					strcpy(SocketInfo->Buffer, "\n");
 				}
 			}
 			else

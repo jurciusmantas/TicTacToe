@@ -9,9 +9,9 @@
 
 typedef struct _SOCKET_PAIR_INFORMATION {
    
-   char Buffer1[5];
+   char * Buffer1;
    SOCKET Socket1;
-   char Buffer2[5];
+   char * Buffer2;
    
    SOCKET Socket2;
    BOOL IsPairReady;
@@ -183,7 +183,9 @@ int main(int argc, char *argv[])
 					
 					send(c_socket, hiConn1, strlen(hiConn1), 0);
 					player++;
-					SocketArray[TotalSocketPairs]->Buffer1[0] = '\n';
+					SocketArray[TotalSocketPairs]->Buffer1 = (char * ) malloc(5 * sizeof(char));
+					strcpy(SocketArray[TotalSocketPairs]->Buffer1, "\n");
+					printf("[DEBUG][LSOCKET] SocketArray->Buffer1 = %s\n", SocketArray[TotalSocketPairs]->Buffer1);
 				}
 				else
 				{
@@ -233,7 +235,7 @@ int main(int argc, char *argv[])
 					exit(1);
 				}
 				
-				ProcessMove(&(SocketArray[i]->Board), Socket
+				ProcessMove(&(SocketArray[i]->Board), SocketArray[i]->Buffer1, 1);
 				strcpy(SocketArray[i]->Buffer1, "OK");
 				continue;
 			}
@@ -286,7 +288,7 @@ int main(int argc, char *argv[])
 				//VALIDATE CLIENT MOVE??
 				strcpy(SocketArray[i]->Buffer2, "OK");
 				
-				if (ValidateMove(SocketArray[i]->Buffer2)
+				//if (ValidateMove(SocketArray[i]->Buffer2)
 				
 				continue;
 			}
@@ -472,7 +474,7 @@ BOOL CreateSocketInformation(SOCKET s)
    LPSOCKET_PAIR_INFORMATION SI;
    printf("Accepted socket number %d\n", s);
    
-   if ((SI = (LPSOCKET_PAIR_INFORMATION) GlobalAlloc(GPTR, sizeof(SOCKET_PAIR_INFORMATION))) == NULL)
+   if ((SI = (LPSOCKET_PAIR_INFORMATION) malloc(sizeof(SOCKET_PAIR_INFORMATION))) == NULL)
    {
       printf("ERROR: CREATING GLOBAL SPACE FOR SOCKET %d INFO\n", s);
       return FALSE;
@@ -487,7 +489,9 @@ BOOL CreateSocketInformation(SOCKET s)
    
    SI->IsPairReady = FALSE;
    memset(SI->Board, 0, sizeof(SI->Board));
-   
+   SI->Buffer1 = (char *) malloc(5 * sizeof(char));
+   strcpy(SI->Buffer1, "\n");
+   printf("[DEBUG] SI->Buffer1 = %s\n", SI->Buffer1);
    SocketArray[TotalSocketPairs] = SI;
    return(TRUE);
 }
